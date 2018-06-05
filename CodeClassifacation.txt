@@ -1,0 +1,108 @@
+import pandas as pd
+
+import numpy as np
+from pandas import read_csv as read
+
+path = "C:/Users/Alena/Churn_2.csv"
+data = read(path, delimiter=",")
+to_drop = ['issue_208','TRG_is_churn','TECH_max_churn_date','TECH_partition','TECH_max_reason','FINN_BLOCK_days_since_last','TV_days_from_last_TV_on','CCC_IN_avg_calls_total_length_avg','CCC_IN_last3_calls_cnt','CCC_IN_avg_calls_last3_length_avg','CCC_IN_max_calls_last3_length_max','CCC_IN_min_calls_last3_length_min','CCC_IN_sum_calls_last3_length_sum','CCC_IN_first3_calls_cnt','CCC_IN_call_avg_time','CCC_OUT_last3_calls_cnt','CCC_OUT_avg_calls_last3_length_avg','CCC_OUT_max_calls_last3_length_max','CCC_OUT_min_calls_last3_length_min','CCC_OUT_min_calls_last3_length_min','CCC_OUT_min_calls_last3_length_min','CCC_OUT_first3_calls_cnt','CCC_OUT_avg_calls_first3_length_avg','CCC_OUT_max_calls_first3_length_max','CCC_OUT_min_calls_first3_length_min','CCC_OUT_sum_calls_first3_length_sum','CCC_OUT_days_since_last_call','CCC_OUT_call_avg_time','CCC_OUT_have_calls_only_in_first3','CCC_OUT_have_calls_only_in_last3','GEO_AVG_TT_days_from_last','to_send','conn_type']
+
+data_df = data.drop(to_drop, axis=1)
+
+data_df = data_df.fillna(data_df.median(axis=0), axis=0)
+data_df.fillna(0, inplace=True) 
+data_cotegorial = pd.get_dummies(data['conn_type']) 
+churn_feat_space = pd.concat((data_df, data_cotegorial), axis=1) 
+
+y = np.array(data['TRG_is_churn'], dtype=int)
+
+X = churn_feat_space
+from sklearn.cross_validation import train_test_split as train
+X_train, X_test, y_train, y_test = train(X, y, test_size = 0.4, random_state = 11)
+
+N_train, _ = X_train.shape 
+
+N_test,  _ = X_test.shape
+
+N_train, N_test
+
+from sklearn.ensemble import RandomForestClassifier
+
+
+clf = RandomForestClassifier(n_estimators=100, n_jobs=-1, random_state=1, oob_score=True)
+
+clf.score(X_test, y_test)
+clf.fit(X_train, y_train)
+
+
+err_train = np.mean(y_train != clf.predict(X_train))
+
+err_test  = np.mean(y_test  != clf.predict(X_test)) # ошибка на тестовой выбоке 28%!!!!
+
+err_train, err_test
+
+feature_names = X.columns
+
+importances = clf.feature_importances_  #важность признаков
+indices = np.argsort(importances)[::-1]
+
+print("Feature importances:")
+for f, idx in enumerate(indices):
+   
+	print("{:2d}. feature '{:5s}' ({:.4f})".format(f + 1, 		feature_names[idx], importances[idx]))
+
+import matplotlib.pyplot as plt
+d_first = 20
+
+plt.figure(figsize=(8, 8))
+
+plt.title("Feature importances")
+
+plt.bar(range(d_first), importances[indices[:d_first]], align='center')
+plt.xticks(range(d_first), np.array(feature_names)[indices[:d_first]], rotation=90)
+
+plt.xlim([-1, d_first]);
+
+best_features = indices[:8] # признаки с большим вкладом
+best_features_names = feature_names[best_features]
+
+print(best_features_names)
+
+
+from sklearn import ensemble
+
+gbt = ensemble.GradientBoostingClassifier(n_estimators=300, random_state=11)
+gbt.fit(X_train, y_train)
+
+gbt.score(X_test, y_test)
+
+
+err_train = np.mean(y_train != gbt.predict(X_train))
+
+err_test = np.mean(y_test != gbt.predict(X_test))
+
+err_train, err_test
+
+
+from sklearn.metrics import roc_curve, auc, roc_auc_score
+
+auc = roc_auc_score(y_train, y_test)
+
+roc_curve = roc_curve(y_train, y_test)
+
+with plt.xkcd():
+    
+	plt.plot(roc_curve[0], roc_curve[1]);
+    
+	plt.plot([0,1], [0,1])
+    
+	plt.xlabel('FPR'); 
+	plt.ylabel('TPR'); 
+	plt.title('test AUC = %f' % (auc)); 
+	plt.axis([-0.05,1.05,-0.05,1.05]);
+
+from sklearn.metrics import classification_report 
+
+report = classification_report(y_test, clf.predict(X_test), target_names=['0', '1'])
+
+print(report)
